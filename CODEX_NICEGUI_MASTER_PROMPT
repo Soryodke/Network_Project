@@ -1,0 +1,128 @@
+CODEX MASTER PROMPT — Network Automation Tools (NiceGUI + BAT)
+Mission
+You are a senior Python engineer, enterprise network automation engineer, QA engineer, and software architect. Implement and deliver two fully independent, complete Python network-operation applications in ONE Codex task. Use the preexisting MASTER_SPEC.md in this repository as a reference for the functional requirements, but THIS PROMPT OVERRIDES any conflicting architecture, packaging, interface, and delivery instructions.
+
+The user explicitly wants the complete implementation of both applications together, not a phase-by-phase user approval workflow. Break the work into internal implementation and test checkpoints as necessary, but do not stop after Program 1 or ask the user to test between stages. Run available automated tests, repair failures, and submit one consolidated Pull Request. If the environment, quota, or hardware prevents some part from being completed, clearly state precisely what remains undone; never report mock behavior as hardware-verified.
+0. Mandatory architectural decisions
+- Target: Windows 10/11, with an installed and organization-approved Python runtime; source can be developed/tested in Linux-based Codex Cloud.
+- User interface: NiceGUI served only on localhost (127.0.0.1), opened automatically in the user's default browser.
+- Startup: double-click the appropriate .bat launcher. No manual python ... command for normal operation; no custom .exe or Installer build is required.
+- The two tools must be independent, each with its own Python application entry point, launcher, dependencies, runtime settings, device store, logs, task/session manager, and port. Program 1 must never import, ship, or expose Program 2 code or confidential mapping data. Vendor users receive only the Program 1 folder.
+- Program 1: Interface & Tunnel Manager; default local URL http://127.0.0.1:8080.
+- Program 2: 802.1X Recovery Manager; default local URL http://127.0.0.1:8081.
+- A browser GUI / localhost HTTP server is allowed. Never bind to 0.0.0.0 or any production-facing IP; never expose inbound network services to other hosts; never require a cloud service or internet at runtime. Use reload=False during operation. No telemetry.
+- No PySide6, PyQt, Tkinter, Electron, Flask or separately exposed public API for the UI. Prefer NiceGUI, Paramiko / Netmiko where suitable, PySerial, openpyxl, and built-in SQLite; avoid pandas unless genuinely necessary.
+- Prefer clear, maintainable source structure over unnecessary microservices and frameworks. All SSH/console/config-changing work must run off the UI event loop and be coordinated by explicit task/session managers.
+- Never bake actual corporate IPs, hostnames, MACs, credentials, proprietary configs, or uploaded private spreadsheets into Git; use synthetic examples and allow local-only import of actual workbook after deployment on authorized machines.
+- Do not delete the previous PySide6 implementation. Work from a new Git branch and open a Pull Request to the repository. Avoid merging or overwriting existing PR branches.
+1. Project layout and user experience
+Recommended independent distribution folders (adapt as needed while preserving separation):
+Network-Automation-Tools/
+  Program1_Interface_Tunnel/
+    run_interface_manager.bat
+    app.py
+    requirements.txt
+    core/
+    connections/
+    ui/
+    tests/
+    sample_data/
+  Program2_Dot1x_Recovery/
+    run_dot1x_recovery.bat
+    app.py
+    requirements.txt
+    core/
+    adapters/
+    ui/
+    tests/
+    sample_data/
+  docs/
+    README_TH.md
+    SECURITY_AND_LIMITATIONS.md
+  .github/workflows/tests.yml
+Each launcher must:
+- change working directory to its own folder via %~dp0, detect an authorized available Python runtime or a project-local pre-created virtual environment, report a friendly error when Python or required libraries are absent, and launch the appropriate NiceGUI application;
+- use the configured loopback port and avoid starting duplicate processes; handle port-in-use errors intelligibly;
+- open the browser automatically and leave a clear way to stop the local server and release console/SSH sessions;
+- not silently run pip install, elevate privileges, change Windows security settings, bypass execution controls, download code, or require a corporate security-policy exception. Document optional, IT-approved one-time dependency installation and offline-wheel deployment.
+GUI: clean modern NiceGUI layout with resizable tables, search/filter, progress bars, connection badges, explicit action buttons, per-device results, task history, readable copy/exportable logs. Every button must work; no decorative/inert actions. Provide responsive layout on ordinary laptop screens. Avoid browser refresh terminating device tasks.
+2. Shared engineering concept WITHOUT shared runtime dependency
+The programs may have similar architectural patterns, but their distributed folders must be self-contained and independent. Device communication and configuration logic must be separate from presentation logic. Each application owns a server-side task manager; no SSH or serial transport belongs to a web-page object or per-browser-request lifecycle. Tasks are given immutable IDs and store progress/results in backend memory plus local durable records (SQLite/JSON as appropriate). On page refresh or browser reconnect, reattach to an existing task ID and display current progress without restarting the device operation. Closing or navigating away from a tab must not automatically drop a running session; terminating the Python process will terminate the sessions, and the GUI must state this clearly.
+
+Session reliability requirements:
+- Configurable connection timeout, authentication timeout, command timeout, and idle timeout / keepalive only when appropriate.
+- A clear connection owner, connection/serial locks, safe cleanup, resource release, and no two tasks using the same physical serial session concurrently.
+- Direct SSH can use bounded concurrency across independent targets; a single serial console → SSH Jump is sequential, never concurrent over one console.
+- Verify device identity and trust SSH host keys according to approved enrollment. Never blindly accept or disable verification; gateway-to-target trust is distinct from laptop-to-device trust.
+- Correct handling of password, privilege/enable prompts, paging, host-key prompts, remote exit and gateway-prompt recovery. If a jump session cannot safely return to the gateway context, STOP the remaining jump batch (do not guess device identity).
+- Every config-changing action records explicit target, interface, attempted command outcome, read-back outcome, and unresolved/ambiguous outcome when connection dies after sending commands. No automatic blind retries of uncertain writes.
+- Runtime credentials never stored in plaintext databases/logs, never printed on the browser, never shipped in examples. No task starts on application launch.
+- Allow graceful Stop/Cancel, but explain that Cancel is not a rollback of an already-sent command.
+- Fail-skip independent targets where safe; do not continue when shared console context is ambiguous.
+- Default to simulated device mode; switching to live mode must require an explicit user selection and confirmation, and real devices are reserved for authorized post-development lab tests.
+3. Program 1 — Interface & Tunnel Manager
+Purpose: enable an engineer/vendor to check a chosen interface's operational and administrative status and apply shutdown / no shutdown across multiple selected routers. Primary disaster-recovery use case: HQ's primary overlay tunnels fail, a technician consoles into a branch router, then SSHes from that gateway to other branches over independently reachable WAN/MPLS IP addresses to open backup tunnel interfaces. HQ services, HQ loopbacks, HQ VPN, or centralized AAA must not be mandatory dependencies; allow an authorized local fallback login when appropriate.
+
+Connection modes:
+1. Direct SSH: select multiple routers and use each router's management/reachable IP; bounded parallel SSH and independent per-target status/error.
+2. Direct Console: enumerate and select COM port, configurable baud (default 9600), handle serial login/privilege and selected local router.
+3. Console → SSH Jump: choose local console gateway and multiple remote target routers; use the targets' WAN IP; gateway and target runtime credentials can differ; include the gateway itself as a target if selected; process all target SSH sessions sequentially through the ONE console, recovering verified gateway prompt between targets; show each target result.
+Device inventory locally managed through GUI, with Add/Edit/Delete, multi-select, search, import/export CSV/XLSX and per-device hostname, management IP, WAN IP, vendor/platform/model, site and notes. Do not preload any real corporate data. Match target hostname/prompt identity before changes.
+
+Interface selection:
+- Same Interface on all selected routers (e.g. Tunnel90).
+- Per-Device Interface selection (e.g. Tunnel10, Tunnel90, Tunnel500, GigabitEthernet0/0/0), with support for flexible names and optionally multiple interface names per device.
+- Vendor interface selection remains FLEXIBLE; do not limit it to one predefined tunnel. Device account privileges remain the true authorization control.
+Exactly three prominent actions: Check Status, No Shutdown, Shutdown. Do not add a separate multi-step pre-check wizard or require Check Status before changes. For write actions, require an explicit confirmation listing devices/interfaces. After executing, perform a read-back status check. Provide statuses UP (up/up), DOWN (down/down), ADMIN DOWN, UP/DOWN, NOT FOUND, FAILED, UNKNOWN and distinguish command accepted from interface actually up. Never invent status from command response alone.
+
+Results table columns: device, target IP, connection mode, interface, admin/operational state, action, action result, timestamp and explanation. Live operation logs, execution progress, count success/failed/skipped, history, copy/export results, clear logs, cancellable queued tasks. Make meaningful error handling (login, timeout, unknown interface, unsupported platform, lost serial context).
+
+Implement real adapters where support and syntax are verified, alongside tested simulated/mock transports. In particular, support Cisco IOS/IOS-XE router use cases under documented platform assumptions; do not claim Huawei router support without adapter coverage.
+4. Program 2 — 802.1X Recovery Manager (Internal IT only)
+Purpose: temporarily recover selected switch access ports when endpoint 802.1X authentication fails. A static data VLAN is applied during recovery instead of depending on a RADIUS dynamic VLAN; preserve any existing static voice VLAN, QoS, STP and other critical settings, and restore the exact relevant original state later. This is a separate IT-only application—never shipped alongside the vendor program.
+
+Supported target design: Cisco Catalyst with 802.1X/MAB and Huawei S5735/S5700 PoE with hybrid ports and authentication profiles. Use separate version-aware vendor adapters and safe refusal on unsupported firmware, port types, ambiguous policies or syntax; do not guess device configuration commands.
+
+Local workbook import from Vlan_User.xlsx (not committed):
+- Sum_Vlan (also tolerate reasonable capitalization/spacing variants): pattern-based reference data VLAN mapping by switch name, floor and side.
+- Sum_switch: initial switch inventory, editable via GUI.
+- Special user / Specail user: columns SW Name and Interface; these exact switch+port matches receive recovery VLAN 27.
+- Normalize whitespace, headers, interface aliases and switch-name matching; prevent accidental collisions in similar patterns (e.g., ASW_9_1 vs ASW_9_2); flag missing/ambiguous mapping instead of guessing.
+VLAN assignment priority, exactly: (1) Manual per-interface override, (2) Special-user match → VLAN 27, (3) reference VLAN pattern. There is NO switch-wide override mode. Display each selected port's chosen data VLAN and its source before changes; allow specific port exceptions. Never automatically replace original voice VLAN with data VLAN mapping.
+
+Recovery process:
+1. Select one/many switches and specific interface(s), or deliberately choose bulk access-port recovery.
+2. Read device model/OS, interface type, current configuration and original static voice VLAN; for Cisco, note that RADIUS-derived dynamic data VLAN may NOT be in running config.
+3. Save durable original per-device/per-port configuration snapshot first, with timestamp, device identity, session ID and checksums; a failed snapshot blocks change.
+4. Resolve recovery data VLAN and its source; check local VLAN existence/port eligibility; exclude trunk, uplink, management, port-channel and unknown/special-purpose ports by default.
+5. Create and show before/after diff including authentication, VLAN, voice, QoS, STP, LLDP, service-policy, description and other relevant interface config. Require explicit review/confirmation.
+6. Apply selective authentication changes preferentially, preserve unrelated settings and assign the mapped static data VLAN. Be precise about Cisco 802.1X vs MAB and Huawei interface-bound authentication profiles and PVID/untagged/tagged hybrid VLAN behavior; do not remove shared/global auth profiles or break voice VLAN.
+7. Verify post-change configuration and actual state, recording success, failure and ambiguities per port; fail-skip other independent eligible ports where safe.
+8. Advanced default interface / reset-and-reapply is allowed ONLY with a complete device-specific validated template, a verified backup and a special warning; never perform a blind reset or assume data/voice VLAN are the only original configuration.
+Restore process:
+- Select a prior recovery session and interfaces; compare current config to the saved original and the recovery plan, flag conflicts/unknown out-of-band changes instead of overwriting silently.
+- Remove temporary static VLAN and temporary authentication changes, restore original relevant commands and VLAN membership in an adapter-specific order, verify readback and log individual port outcome.
+- For originally RADIUS-assigned data VLANs, do not persist a static data VLAN as the 'restored dynamic VLAN'; restore the 802.1X/MAB behavior so RADIUS can assign dynamically after successful authentication.
+- Include recovery/restore history and exportable redacted logs. Never assume success without readback.
+5. Security, test and verification requirements
+- Bind each NiceGUI server only to 127.0.0.1, use reload=False in deployed launch, avoid public tunnels/external sharing. Consider protection against browser-origin request misuse and concurrent operator sessions even on localhost; never enable remote access without an explicit future design and approval.
+- Clear UI distinction between SIMULATED and LIVE LAB/APPROVED mode. Do not launch real-device jobs automatically.
+- Tests must NEVER contact corporate/production network; use mock command outputs for up/down/admin-down, login failures, fail-skip, prompt mismatch, host-key issues, serial disconnects, browser reload/reconnection, cancellation, config snapshot, VLAN precedence, Cisco/Huawei parsing, rollback conflict and port exclusion.
+- Run unit/integration tests, static checks and a headless browser/GUI smoke test where tools allow. Linux Codex Cloud is acceptable for source development; Windows-specific path and BAT script behavior must have CI/static checks, with an optional Windows GitHub Actions job for Python-based smoke tests. No Windows EXE build is required.
+- Verify each program can launch independently, from its own folder; that installing/copying Program 1 alone works and includes no Program 2 source/data.
+- Explain dependencies needed for Python execution and how IT can approve/install them in a managed environment; do not suggest bypassing company endpoint controls.
+- If live CLI semantics cannot be validated without real hardware, implement a clearly marked safe adapter or fail-closed pending lab validation; document exact validation gaps. Do not fabricate a 'fully tested in production' claim.
+6. Delivery — one complete task, one PR
+Produce ALL of the following before considering this task complete:
+- Two independent source trees with functioning NiceGUI pages, server-side Task/Session Managers and BAT launchers.
+- Realistic supported device connection/adapters where validated plus reliable simulated mode.
+- Program 1 interface/tunnel status + administrative action workflows and Console → SSH Jump handling.
+- Program 2 workbook import/mappings, per-port 802.1X recovery, original-config snapshot, diff preview and restore.
+- Local inventory/settings/log storage, CSV/XLSX imports/exports as required, mock data only in repository.
+- Automated tests, test reports and a code/secret exclusion audit.
+- README / run instructions in Thai; troubleshooting: Python path, dependency install, occupied localhost port, browser refresh, console driver, SSH key, session loss.
+- Optional GitHub Actions workflow to verify both projects on Linux and Windows runners without real hardware.
+- One GitHub Pull Request containing both complete applications on a new branch. Include a checklist clearly separating implemented, automatically tested and still requiring authorized Windows/lab hardware validation.
+Do not stop after Program 1, ask for acceptance of intermediate phases, or deliver only a conceptual design. Internally iterate until automated tests pass where possible. Report any incomplete area transparently rather than misrepresenting it. At the end, respond in Thai with the PR URL, file layout, executed tests, startup steps, and remaining lab-verification issues.
+
+Start implementing now.
