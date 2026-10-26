@@ -1,0 +1,37 @@
+name: Independent application tests
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  unit:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        program: [Program1_Interface_Tunnel, Program2_Dot1x_Recovery]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+        working-directory: ${{ matrix.program }}
+      - run: python -m pytest -q --junitxml=test-results.xml
+        working-directory: ${{ matrix.program }}
+      - run: python -m ruff check .
+        working-directory: ${{ matrix.program }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: results-${{ matrix.os }}-${{ matrix.program }}
+          path: ${{ matrix.program }}/test-results.xml
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r Program1_Interface_Tunnel/requirements-dev.txt playwright==1.64.1
+      - run: python -m playwright install --with-deps chromium
+      - run: python scripts/browser_smoke.py
