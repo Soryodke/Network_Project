@@ -24,3 +24,21 @@ Unit coverage includes status classification, command injection refusal, synthet
 Resolved failures during development: test invocation needed each distribution's working directory; task-history display did not switch to a newly submitted restore task; smoke-test cleanup removed temporary data before stopping servers; POSIX startup probe rejected recently closed ports in TIME_WAIT. Relevant unit/browser checks were rerun successfully.
 
 Supply-chain limitation: direct dependencies are version-pinned; full transitive lockfiles/hashes are not supplied. Package TLS verification remained enabled. Browser download was denied by environment policy, so the preinstalled `/usr/bin/chromium` was used without changing network policy for browser downloads.
+
+## Dashboard redesign validation
+
+The frontend redesign retains the same 21 Program 1 and 20 Program 2 backend tests (41 passing). Ruff lint/format checks passed. No SQLite schema, SSH/session engine, recovery backend or BAT launcher changes were needed.
+
+The updated browser test uses fresh temporary databases and synthetic inventory, then checks:
+
+- Inventory add, CSV import, search, bounded six-row pagination and multi-row selection.
+- Shutdown → ADMIN DOWN, No Shutdown → UP and per-device Check Status.
+- Completed task results remain available after page reload.
+- Recovery diff confirmation, full before/after inspection, bound manual override and snapshot restore → RESTORED.
+- Connection settings, inventory, preview, override, logs and settings navigation.
+- Light/Dark toggling, no document horizontal overflow, primary actions above the fold and a bounded device picker at 1366×768 and 1920×1080.
+- Same-origin rejection and successful browser operation with external requests blocked.
+
+Eight actual browser screenshots are included in [the screenshot gallery](UI_REDESIGN.md). They were visually inspected for layout and theme contrast. CI now retains screenshot artifacts. These tests do not establish physical hardware or Windows execution readiness.
+
+A task-selector ordering regression found during redesign was fixed: select options now update before selecting a new task ID, so completed background results appear without a page refresh.

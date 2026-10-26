@@ -11,7 +11,7 @@ Incomplete relative to the master specification:
 - No bulk access-port discovery, reset-and-reapply workflow, or hardware-certified adapter matrix.
 - Direct SSH target batches are sequential within each task; independent tasks use a bounded four-worker pool and serialize by inventory ID. Duplicate inventory entries pointing at the same physical device are not automatically coalesced.
 - Workbook support uses a documented explicit schema and token patterns; undocumented proprietary spreadsheet layouts are refused. Mapping tables are in process memory and must be reimported after restarting. Inventory and snapshots persist.
-- GUI is functional but has not met every requested UX detail: results are structured JSON rather than the full specified result grid; table columns are sortable, not freely resizable; simulated gateway trust/context state is modeled but does not validate real serial/SSH prompts.
+- The dashboard provides structured results, compact paginated tables and navigation. Column widths are responsive rather than freely user-resizable. Simulated gateway trust/context does not validate real serial/SSH prompts.
 - Windows launchers and Linux/Windows CI are supplied, but no Windows machine or physical console was available. Browser tests ran on Linux Chromium only.
 - Authentication/command timeouts currently share one SSH timeout setting, with no UI controls for separate idle/keepalive tuning.
 - Host/origin checks reduce browser-origin abuse. This is not an authentication boundary against other local users/processes. No remote multi-user deployment is supported.
